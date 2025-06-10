@@ -56,8 +56,12 @@ impl ProtocolHandler for ViDial {
 
             // Echo any bytes received back directly.
             // This will keep copying until the sender signals the end of data on the stream.
-            let bytes_sent = tokio::io::copy(&mut recv, &mut send).await?;
-            println!("Copied over {bytes_sent} byte(s)");
+            let message = recv.read_to_end(1000).await?;
+            let len = message.len();
+            println!("Received message: {}", String::from_utf8_lossy(&message));
+
+            send.write_all(&message).await?;
+            println!("Copied over {len} byte(s)");
 
             // By calling `finish` on the send stream we signal that we will not send anything
             // further, which makes the receive stream on the other end terminate.
