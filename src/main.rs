@@ -82,7 +82,7 @@ async fn start_receive_side(endpoint: Endpoint) -> Result<Router> {
     Ok(router)
 }
 
-async fn send_message(endpoint: Endpoint, peer_id: iroh::NodeId, message: String) -> Result<()> {
+async fn send_message(endpoint: &Endpoint, peer_id: iroh::NodeId, message: String) -> Result<()> {
     println!("----- Viduo send -----");
     let connection = endpoint.connect(peer_id, ALPN).await?;
     let (mut send, mut recv) = connection.open_bi().await?;
@@ -148,15 +148,35 @@ async fn main() -> Result<()> {
         args.message,
         args.receive_side,
     ) {
+        (Some(true), None, _, _) => println!("Must specify peer id if sending"),
+        (Some(true), _, None, _) => println!("Must specify message if sending"),
+        (Some(true), peer_id, message, Some(true)) => {
+            println!("Starting receive side");
+            let router = start_receive_side(endpoint).await?;
+
+            let peer_id = peer_id.unwrap();
+            println!("Starting send side. Connecting to peer id: {}", peer_id);
+
+            let message = message.unwrap();
+            for _ in 1..10 {
+                println!("Sending message: {message}");
+                send_message(
+                    router.endpoint(),
+                    iroh::NodeId::from_str(&peer_id)?,
+                    message.clone(),
+                )
+                .await?;
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+            router.shutdown().await?;
+        }
         (Some(true) | None, peer_id, message, Some(false) | None) => {
             let peer_id = peer_id.unwrap();
             println!("Starting send side. Connecting to peer id: {}", peer_id);
             let message = message.unwrap();
             println!("Sending message: {message}");
-            send_message(endpoint, iroh::NodeId::from_str(&peer_id)?, message).await?;
+            send_message(&endpoint, iroh::NodeId::from_str(&peer_id)?, message).await?;
         }
-        (Some(true), None, _, _) => println!("Must specify peer id if sending"),
-        (Some(true), _, None, _) => println!("Must message if sending"),
         (Some(false) | None, _, _, Some(true) | None) => {
             println!("Starting receive side");
             let router = start_receive_side(endpoint).await?;
